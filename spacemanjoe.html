@@ -1,0 +1,854 @@
+<html>
+<head>
+    <title>spacemanjoe123s page</title>
+    <style>
+        body { background: #111; color: #fff; font-family: Arial; }
+        #gameCanvas { background: #222; display: block; margin: 30px auto; border: 3px solid #fff; }
+        #score { text-align: center; font-size: 1.5em; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h2 style="text-align:center;">Spaceman Catching Alien Game</h2>
+    <div id="story" style="text-align:center; font-size:1.2em; margin-bottom:10px;"></div>
+    <canvas id="gameCanvas" width="500" height="400"></canvas>
+    <div id="score">Score: 0</div>
+    <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    let spaceman = { x: 50, y: 200, size: 32, speed: 5 };
+    let score = 0;
+    let alienDX = 2, alienDY = 2;
+    let level = 1;
+    let aliens = [];
+    let aliensToCatch = 5;
+    let caughtThisLevel = 0;
+    let inSpaceship = false;
+    let spaceship = { x: canvas.width/2, y: canvas.height-60, w: 40, h: 60, speed: 7 };
+    let asteroids = [];
+    let asteroidSpeed = 2.5;
+    let asteroidInterval = 60;
+    let asteroidTimer = 0;
+    let spaceshipScore = 0;
+    let lives = 3;
+    let gameOver = false;
+    let paused = false;
+    let bossBattle = false;
+    let boss = { x: canvas.width/2, y: 80, w: 80, h: 40, hp: 10, dx: 3 };
+    let bullets = [];
+    let bossBullets = [];
+    let canShoot = true;
+    let playerHP = 50;
+    let inShop = false;
+    let shopItems = [
+        { name: 'Extra Life', cost: 10, effect: () => { lives++; } },
+        { name: 'Shield (1 hit)', cost: 15, effect: () => { playerHP += 10; } },
+        { name: 'Double Bullets', cost: 20, effect: () => { doubleBullets = true; } }
+    ];
+    let doubleBullets = false;
+    let coins = 0;
+    let nextLevel = 2;
+    let normalLevel = false;
+    let currentNormalLevel = 1;
+    let showNextLevelSign = false;
+
+    function setStory() {
+        let storyText = '';
+        if(level === 1) storyText = "Mission: Spaceman Joe lands on Planet Zog. Catch 3 friendly aliens to learn their secrets!";
+        else if(level === 2) storyText = "Level 2: The aliens are faster and sneakier. Catch 5 to continue your quest!";
+        else if(level === 3) storyText = "Level 3: Alien leader appears! Catch 7 aliens to unlock the portal home.";
+        else storyText = "Congratulations! Spaceman Joe has completed all missions!";
+        document.getElementById('story').textContent = storyText;
+    }
+
+    function setupLevel() {
+        aliens = [];
+        caughtThisLevel = 0;
+        if(level === 1) { aliensToCatch = 3; alienDX = 2; alienDY = 2; }
+        else if(level === 2) { aliensToCatch = 5; alienDX = 3; alienDY = 3; }
+        else if(level === 3) { aliensToCatch = 7; alienDX = 4; alienDY = 4; }
+        else { aliensToCatch = 0; }
+        for(let i=0;i<aliensToCatch;i++){
+            aliens.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height, size: 28 });
+        }
+        setStory();
+    }
+
+    function drawSpaceman() {
+        ctx.save();
+        ctx.translate(spaceman.x, spaceman.y);
+        // Helmet (gradient)
+        let helmetGrad = ctx.createRadialGradient(0,0,spaceman.size/8,0,0,spaceman.size/2);
+        helmetGrad.addColorStop(0, '#aef');
+        helmetGrad.addColorStop(1, '#036');
+        ctx.fillStyle = helmetGrad;
+        ctx.beginPath(); ctx.arc(0,0,spaceman.size/2,0,2*Math.PI); ctx.fill();
+        // Visor
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(0,-4,spaceman.size/3,Math.PI*0.8,Math.PI*2.2); ctx.fill();
+        ctx.globalAlpha = 1;
+        // Body (rounded rectangle)
+        ctx.fillStyle = '#eee';
+        roundRect(ctx,-spaceman.size/4,spaceman.size/4,spaceman.size/2,spaceman.size/2,8);
+        // Arms
+        ctx.strokeStyle = '#eee'; ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.moveTo(-spaceman.size/4,spaceman.size/2); ctx.lineTo(-spaceman.size/2,spaceman.size/1.2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(spaceman.size/4,spaceman.size/2); ctx.lineTo(spaceman.size/2,spaceman.size/1.2); ctx.stroke();
+        // Legs
+        ctx.strokeStyle = '#aaa'; ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(-spaceman.size/8,spaceman.size*0.75); ctx.lineTo(-spaceman.size/8,spaceman.size); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(spaceman.size/8,spaceman.size*0.75); ctx.lineTo(spaceman.size/8,spaceman.size); ctx.stroke();
+        ctx.restore();
+    }
+    function drawAlien(alien) {
+        ctx.save();
+        ctx.translate(alien.x, alien.y);
+        // Alien head (gradient)
+        let grad = ctx.createRadialGradient(0,0,alien.size/8,0,0,alien.size/2);
+        grad.addColorStop(0, '#0f8');
+        grad.addColorStop(1, '#030');
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.ellipse(0,0,alien.size/2,alien.size/3,0,0,2*Math.PI); ctx.fill();
+        // Eyes
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(-alien.size/8,-alien.size/10,alien.size/10,0,2*Math.PI); ctx.fill();
+        ctx.beginPath(); ctx.arc(alien.size/8,-alien.size/10,alien.size/10,0,2*Math.PI); ctx.fill();
+        ctx.fillStyle = '#222';
+        ctx.beginPath(); ctx.arc(-alien.size/8,-alien.size/10,alien.size/20,0,2*Math.PI); ctx.fill();
+        ctx.beginPath(); ctx.arc(alien.size/8,-alien.size/10,alien.size/20,0,2*Math.PI); ctx.fill();
+        // Body (rounded rectangle)
+        ctx.fillStyle = '#080';
+        roundRect(ctx,-alien.size/4,alien.size/3,alien.size/2,alien.size/2,8);
+        // Arms
+        ctx.strokeStyle = '#0f8'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(-alien.size/4,alien.size/2); ctx.lineTo(-alien.size/2,alien.size/1.2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(alien.size/4,alien.size/2); ctx.lineTo(alien.size/2,alien.size/1.2); ctx.stroke();
+        // Legs
+        ctx.strokeStyle = '#080'; ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.moveTo(-alien.size/8,alien.size*0.75); ctx.lineTo(-alien.size/8,alien.size); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(alien.size/8,alien.size*0.75); ctx.lineTo(alien.size/8,alien.size); ctx.stroke();
+        ctx.restore();
+    }
+    function roundRect(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x+r, y);
+        ctx.lineTo(x+w-r, y);
+        ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+        ctx.lineTo(x+w, y+h-r);
+        ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+        ctx.lineTo(x+r, y+h);
+        ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+        ctx.lineTo(x, y+r);
+        ctx.quadraticCurveTo(x, y, x+r, y);
+        ctx.closePath();
+        ctx.fill();
+    }
+    function drawPortal() {
+        // Draw a glowing portal in the center
+        const portalX = canvas.width/2, portalY = canvas.height/2, portalR = 50;
+        ctx.save();
+        ctx.translate(portalX, portalY);
+        let grad = ctx.createRadialGradient(0,0,portalR/4,0,0,portalR);
+        grad.addColorStop(0, '#aef');
+        grad.addColorStop(0.5, '#0ff');
+        grad.addColorStop(1, 'rgba(0,255,255,0)');
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(0,0,portalR,0,2*Math.PI); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = '#fff';
+        ctx.beginPath(); ctx.arc(0,0,portalR-8,0,2*Math.PI); ctx.stroke();
+        ctx.restore();
+    }
+    function drawAsteroid(a) {
+        ctx.save();
+        ctx.translate(a.x, a.y);
+        ctx.rotate(a.angle);
+        ctx.fillStyle = '#964B00';
+        ctx.beginPath();
+        ctx.moveTo(a.r,0);
+        for(let i=1;i<=8;i++){
+            let ang = i*Math.PI/4;
+            let rad = a.r*0.8 + Math.random()*a.r*0.4;
+            ctx.lineTo(Math.cos(ang)*rad, Math.sin(ang)*rad);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+    function drawBoss() {
+        ctx.save();
+        ctx.translate(boss.x, boss.y);
+        ctx.fillStyle = '#800';
+        ctx.fillRect(-boss.w/2,-boss.h/2,boss.w,boss.h);
+        ctx.fillStyle = '#fff';
+        ctx.font = '18px Arial';
+        ctx.fillText('BOSS',-20,8);
+        ctx.restore();
+        // Draw boss HP
+        ctx.fillStyle = '#f44';
+        ctx.fillRect(canvas.width/2-40,40,80,10);
+        ctx.fillStyle = '#0f0';
+        ctx.fillRect(canvas.width/2-40,40,8*boss.hp,10);
+        ctx.strokeStyle = '#fff';
+        ctx.strokeRect(canvas.width/2-40,40,80,10);
+        // Draw player HP
+        ctx.fillStyle = '#fff';
+        ctx.font = '16px Arial';
+        ctx.fillText('Your HP: '+playerHP, 80, 80);
+        ctx.fillStyle = '#0af';
+        ctx.fillRect(80,90,playerHP,10);
+        ctx.strokeStyle = '#fff';
+        ctx.strokeRect(80,90,50,10);
+    }
+    function drawSpaceshipScene() {
+        // Realistic spaceship interior with animated space view
+        ctx.fillStyle = '#222';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        // Animated window frame
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(canvas.width/2,canvas.height-60,70,30,0,0,2*Math.PI);
+        ctx.clip();
+        // Animated space background
+        let t = Date.now()/9000;
+        let spaceGrad = ctx.createRadialGradient(canvas.width/2,canvas.height-60,10,canvas.width/2,canvas.height-60,70);
+        spaceGrad.addColorStop(0,`hsl(${220+Math.sin(t)*10},40%,20%)`);
+        spaceGrad.addColorStop(1,'#000');
+        ctx.fillStyle = spaceGrad;
+        ctx.fillRect(canvas.width/2-70,canvas.height-90,140,60);
+        // Moving stars
+        for(let i=0;i<30;i++){
+            let sx = canvas.width/2-70+((i*37+t*60)%140);
+            let sy = canvas.height-90+((i*53+t*40)%60);
+            ctx.save();
+            ctx.globalAlpha = 0.7+0.3*Math.sin(t+i);
+            ctx.shadowColor = '#fff';
+            ctx.shadowBlur = 10;
+            ctx.fillRect(sx,sy,2,2);
+            ctx.restore();
+        }
+        // Rotating planet view
+        ctx.save();
+        ctx.translate(canvas.width/2,canvas.height-40);
+        ctx.rotate(Math.sin(t)*0.2);
+        ctx.beginPath();
+        ctx.arc(0,0,18,0,2*Math.PI);
+        ctx.fillStyle = '#3c6fa6';
+        ctx.fill();
+        ctx.restore();
+        ctx.restore();
+        // Control panel
+        ctx.fillStyle = '#444';
+        ctx.fillRect(canvas.width/2-120,canvas.height-100,240,100);
+        ctx.fillStyle = '#888';
+        ctx.fillRect(canvas.width/2-60,canvas.height-80,120,40);
+        // Spaceship
+        ctx.save();
+        ctx.translate(spaceship.x, spaceship.y);
+        ctx.fillStyle = '#0af';
+        ctx.beginPath(); ctx.moveTo(0,-spaceship.h/2); ctx.lineTo(-spaceship.w/2,spaceship.h/2); ctx.lineTo(spaceship.w/2,spaceship.h/2); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(-spaceship.w/4,0,spaceship.w/2,spaceship.h/2);
+        ctx.restore();
+        if(!bossBattle){
+            asteroids.forEach(drawAsteroid);
+        } else {
+            drawBoss();
+            bullets.forEach(b => {
+                ctx.save();
+                ctx.translate(b.x,b.y);
+                ctx.fillStyle = '#0ff';
+                ctx.fillRect(-2,-8,4,16);
+                ctx.restore();
+            });
+            bossBullets.forEach(b => {
+                ctx.save();
+                ctx.translate(b.x,b.y);
+                ctx.fillStyle = '#f44';
+                ctx.fillRect(-3,-8,6,16);
+                ctx.restore();
+            });
+        }
+        // Score
+        ctx.fillStyle = '#fff';
+        ctx.font = '20px Arial';
+        ctx.fillText('Asteroids dodged: '+spaceshipScore, 20, 30);
+        drawHearts();
+    }
+
+    function updateSpaceshipScene() {
+        if(paused || inShop) return;
+        if(!bossBattle){
+            asteroids.forEach(a => { a.y += asteroidSpeed; a.angle += a.spin; });
+            // Count asteroids dodged and remove off-screen asteroids
+            asteroids = asteroids.filter(a => {
+                if(a.y < canvas.height+40) return true;
+                if(!a.hit) spaceshipScore++;
+                return false;
+            });
+            // Add new asteroids
+            asteroidTimer++;
+            if(asteroidTimer > asteroidInterval) {
+                asteroidTimer = 0;
+                asteroids.push({ x: 40+Math.random()*(canvas.width-80), y: -30, r: 20+Math.random()*20, angle: Math.random()*Math.PI*2, spin: (Math.random()-0.5)*0.05 });
+            }
+            // Check collision
+            asteroids.forEach(a => {
+                let dx = spaceship.x - a.x;
+                let dy = spaceship.y - a.y;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+                if(dist < a.r + Math.max(spaceship.w,spaceship.h)/2) {
+                    if(!a.hit){
+                        lives--;
+                        a.hit = true;
+                        if(lives <= 0){
+                            gameOver = true;
+                            setTimeout(()=>{},500);
+                        }
+                    }
+                }
+            });
+            // Boss battle trigger
+            if(spaceshipScore >= 20){
+                bossBattle = true;
+                asteroids = [];
+            }
+        } else {
+            // Boss movement
+            boss.x += boss.dx;
+            if(boss.x < boss.w/2 || boss.x > canvas.width-boss.w/2) boss.dx *= -1;
+            // Boss shoots
+            if(Math.random()<0.03) bossBullets.push({x:boss.x,y:boss.y+boss.h/2,dy:5});
+            // Move boss bullets
+            bossBullets.forEach(b=>b.y+=b.dy);
+            bossBullets = bossBullets.filter(b=>b.y<canvas.height+20);
+            // Check boss bullet collision
+            bossBullets.forEach(b=>{
+                let dx = spaceship.x-b.x;
+                let dy = spaceship.y-b.y;
+                if(Math.abs(dx)<spaceship.w/2 && Math.abs(dy)<spaceship.h/2){
+                    playerHP -= 5;
+                    b.y=canvas.height+100;
+                    if(playerHP<=0){gameOver=true;}
+                }
+            });
+            // Move player bullets
+            bullets.forEach(b=>b.y-=10);
+            bullets = bullets.filter(b=>b.y>-20);
+            // Check bullet hits
+            bullets.forEach(b=>{
+                let dx = boss.x-b.x;
+                let dy = boss.y-b.y;
+                if(Math.abs(dx)<boss.w/2 && Math.abs(dy)<boss.h/2){
+                    boss.hp--;
+                    b.y=-100;
+                }
+            });
+            if(boss.hp<=0){
+                bossBattle=false;
+                inShop=true;
+                coins += spaceshipScore;
+                nextLevel++;
+                // Wait for user to interact with shop
+            }
+        }
+    }
+
+    function drawHearts() {
+        for(let i=0;i<lives;i++){
+            ctx.save();
+            ctx.translate(30 + i*35, 60);
+            ctx.fillStyle = '#f44';
+            ctx.beginPath();
+            ctx.arc(-10,0,10,Math.PI,0,false);
+            ctx.arc(10,0,10,Math.PI,0,false);
+            ctx.lineTo(0,22);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    function drawGameOver() {
+        ctx.save();
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = '#222';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#fff';
+        ctx.font = '32px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Game Over!', canvas.width/2, canvas.height/2-30);
+        ctx.font = '22px Arial';
+        ctx.fillText('Asteroids dodged: '+spaceshipScore, canvas.width/2, canvas.height/2+10);
+        ctx.fillText('Press R to Restart', canvas.width/2, canvas.height/2+50);
+        ctx.restore();
+    }
+
+    function drawShop() {
+        ctx.save();
+        ctx.globalAlpha = 0.95;
+        ctx.fillStyle = '#222';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#fff';
+        ctx.font = '28px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('SHOP', canvas.width/2, 60);
+        ctx.font = '20px Arial';
+        ctx.fillText('Coins: '+coins, canvas.width/2, 100);
+        shopItems.forEach((item,i)=>{
+            ctx.fillStyle = coins>=item.cost?'#0f8':'#aaa';
+            ctx.fillText(item.name+' - '+item.cost+' coins', canvas.width/2, 160+i*40);
+        });
+        ctx.fillStyle = '#fff';
+        ctx.fillText('Press 1, 2, or 3 to buy. Press N for next level.', canvas.width/2, 320);
+        ctx.restore();
+    }
+
+    function drawNextLevelScene() {
+        ctx.save();
+        ctx.fillStyle = '#222';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = '#fff';
+        ctx.font = '28px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Level '+nextLevel, canvas.width/2, 80);
+        ctx.font = '20px Arial';
+        ctx.fillText('New challenge: Faster asteroids and boss!', canvas.width/2, 130);
+        ctx.fillText('Press N to start.', canvas.width/2, 180);
+        ctx.restore();
+    }
+
+    function drawNormalLevelScene() {
+        ctx.save();
+        ctx.fillStyle = '#222';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = '#fff';
+        ctx.font = '28px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Level '+(nextLevel-1)+' - Asteroid Field', canvas.width/2, 80);
+        ctx.font = '20px Arial';
+        ctx.fillText('Dodge 30 asteroids to win!', canvas.width/2, 130);
+        ctx.fillText('Asteroids dodged: '+spaceshipScore, canvas.width/2, 180);
+        ctx.restore();
+    }
+
+    function updateNormalLevelScene() {
+        if(paused) return;
+        asteroids.forEach(a => { a.y += asteroidSpeed; a.angle += a.spin; });
+        asteroids = asteroids.filter(a => {
+            if(a.y < canvas.height+40) return true;
+            if(!a.hit) spaceshipScore++;
+            return false;
+        });
+        asteroidTimer++;
+        if(asteroidTimer > asteroidInterval) {
+            asteroidTimer = 0;
+            asteroids.push({ x: 40+Math.random()*(canvas.width-80), y: -30, r: 20+Math.random()*20, angle: Math.random()*Math.PI*2, spin: (Math.random()-0.5)*0.05 });
+        }
+        asteroids.forEach(a => {
+            let dx = spaceship.x - a.x;
+            let dy = spaceship.y - a.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            if(dist < a.r + Math.max(spaceship.w,spaceship.h)/2) {
+                if(!a.hit){
+                    lives--;
+                    a.hit = true;
+                    if(lives <= 0){
+                        gameOver = true;
+                        setTimeout(()=>{},500);
+                    }
+                }
+            }
+        });
+        // Win condition for normal level
+        if(spaceshipScore >= 30){
+            normalLevel = false;
+            inShop = true;
+            coins += spaceshipScore;
+            nextLevel++;
+            spaceshipScore = 0;
+            asteroids = [];
+            lives = 3;
+        }
+    }
+
+    document.addEventListener('keydown', e => {
+        if(e.code==='Space'){
+            paused=!paused;
+        }
+        if(gameOver && e.key.toLowerCase()==='r'){
+            lives = 3;
+            gameOver = false;
+            asteroids = [];
+            spaceship.x = canvas.width/2;
+            spaceshipScore = 0;
+            inSpaceship = true;
+            bossBattle = false;
+            boss.hp = 10;
+            bullets = [];
+            bossBullets = [];
+            playerHP = 50;
+        } else if(inShop){
+            if(e.key==='1' && coins>=shopItems[0].cost){ coins-=shopItems[0].cost; shopItems[0].effect(); }
+            if(e.key==='2' && coins>=shopItems[1].cost){ coins-=shopItems[1].cost; shopItems[1].effect(); }
+            if(e.key==='3' && coins>=shopItems[2].cost){ coins-=shopItems[2].cost; shopItems[2].effect(); }
+            if(e.key.toLowerCase()==='n'){
+                inShop=false;
+                showNextLevelSign = true;
+            }
+        } else if(showNextLevelSign && e.key.toLowerCase()==='n'){
+            showNextLevelSign = false;
+            if(nextLevel % 2 === 0){
+                normalLevel = true;
+                bossBattle = false;
+                spaceshipScore = 0;
+                playerHP = 50;
+                lives = 3;
+                bullets = [];
+                bossBullets = [];
+                asteroids = [];
+            } else {
+                boss.hp = 10+nextLevel*5;
+                asteroidSpeed += 1;
+                spaceshipScore = 0;
+                playerHP = 50;
+                lives = 3;
+                bossBattle = true;
+                bullets = [];
+                bossBullets = [];
+                asteroids = [];
+            }
+        } else if(inSpaceship && !gameOver && !paused) {
+            if(e.key==='ArrowLeft') spaceship.x -= spaceship.speed;
+            if(e.key==='ArrowRight') spaceship.x += spaceship.speed;
+            spaceship.x = Math.max(spaceship.w/2, Math.min(canvas.width-spaceship.w/2, spaceship.x));
+            if(e.key==='z' && canShoot){
+                if(doubleBullets){
+                    bullets.push({x:spaceship.x-10,y:spaceship.y-30});
+                    bullets.push({x:spaceship.x+10,y:spaceship.y-30});
+                } else {
+                    bullets.push({x:spaceship.x,y:spaceship.y-30});
+                }
+                canShoot=false;
+                setTimeout(()=>{canShoot=true;},120);
+            }
+        } else if(!inSpaceship) {
+            if (e.key==='ArrowUp') spaceman.y -= spaceman.speed;
+            if (e.key==='ArrowDown') spaceman.y += spaceman.speed;
+            if (e.key==='ArrowLeft') spaceman.x -= spaceman.speed;
+            if (e.key==='ArrowRight') spaceman.x += spaceman.speed;
+            spaceman.x = Math.max(spaceman.size/2, Math.min(canvas.width-spaceman.size/2, spaceman.x));
+            spaceman.y = Math.max(spaceman.size/2, Math.min(canvas.height-spaceman.size/2, spaceman.y));
+        }
+    });
+
+    function draw() {
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        applyCameraShake();
+        drawParticles();
+        if(showNextLevelSign){
+            drawNextLevelScene();
+        } else if(inShop){
+            drawShop();
+        } else if(normalLevel && inSpaceship) {
+            drawSpaceshipScene();
+            drawNormalLevelScene();
+            if(gameOver) drawGameOver();
+        } else if(bossBattle && !inShop && inSpaceship) {
+            drawSpaceshipScene();
+            if(gameOver) drawGameOver();
+        } else if(!bossBattle && inSpaceship) {
+            drawSpaceshipScene();
+            if(gameOver) drawGameOver();
+        } else if(!inSpaceship && !inShop) {
+            drawPlanetBackground();
+            drawLighting(canvas.width/2, canvas.height/2, 80, '#0ff');
+            drawSpaceman();
+            aliens.forEach(drawAlien);
+            if(level > 3) {
+                drawPortal();
+            }
+        }
+        restoreCameraShake();
+    }
+
+    function drawPlanetBackground() {
+        // Realistic planet surface with animated sky, stars, and terrain
+        // Animated sky gradient
+        let t = Date.now()/12000;
+        let skyGrad = ctx.createLinearGradient(0,0,0,canvas.height);
+        skyGrad.addColorStop(0, `hsl(${200+Math.sin(t)*20},70%,20%)`);
+        skyGrad.addColorStop(0.7, `hsl(${210+Math.cos(t)*15},60%,45%)`);
+        skyGrad.addColorStop(1, `hsl(${195+Math.sin(t*2)*10},50%,80%)`);
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        // Twinkling stars
+        for(let i=0;i<40;i++){
+            ctx.save();
+            ctx.globalAlpha = Math.random()*0.5+0.5;
+            ctx.shadowColor = '#fff';
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.arc(Math.random()*canvas.width, Math.random()*canvas.height*0.5, Math.random()*1.5+0.5, 0, 2*Math.PI);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+            ctx.restore();
+        }
+        // Layered terrain
+        for(let layer=0;layer<3;layer++){
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(0,canvas.height*0.8-layer*10);
+            for(let x=0;x<=canvas.width;x+=20){
+                let y = canvas.height*0.8-layer*10 + Math.sin(x/60+t*2+layer)*12 + Math.random()*6;
+                ctx.lineTo(x,y);
+            }
+            ctx.lineTo(canvas.width,canvas.height);
+            ctx.lineTo(0,canvas.height);
+            ctx.closePath();
+            ctx.fillStyle = layer===0 ? '#6b4f2a' : (layer===1 ? '#8b6f3a' : '#bba86a');
+            ctx.globalAlpha = 0.7-layer*0.2;
+            ctx.shadowColor = '#222';
+            ctx.shadowBlur = 18-layer*6;
+            ctx.fill();
+            ctx.restore();
+        }
+        // Atmospheric haze
+        let hazeGrad = ctx.createRadialGradient(canvas.width/2,canvas.height*0.8,10,canvas.width/2,canvas.height*0.8,180);
+        hazeGrad.addColorStop(0,'rgba(255,255,255,0.12)');
+        hazeGrad.addColorStop(1,'rgba(255,255,255,0)');
+        ctx.save();
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = hazeGrad;
+        ctx.beginPath();
+        ctx.arc(canvas.width/2,canvas.height*0.8,180,0,2*Math.PI);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // --- EXTREME REALISM: Physics-based movement and smooth animations ---
+    // Physics engine variables
+    let spacemanVel = {x:0, y:0}, spacemanAcc = {x:0, y:0};
+    let alienVels = [], alienAccs = [];
+    let spaceshipVel = 0, spaceshipAcc = 0;
+    let asteroidVels = [];
+
+    // Helper for lerp
+    function lerp(a, b, t) { return a + (b-a)*t; }
+
+    // Update spaceman physics
+    function updateSpacemanPhysics() {
+        spacemanAcc.x = 0; spacemanAcc.y = 0;
+        if(keys['ArrowUp']) spacemanAcc.y = -0.4;
+        if(keys['ArrowDown']) spacemanAcc.y = 0.4;
+        if(keys['ArrowLeft']) spacemanAcc.x = -0.4;
+        if(keys['ArrowRight']) spacemanAcc.x = 0.4;
+        // Friction
+        spacemanVel.x *= 0.92; spacemanVel.y *= 0.92;
+        spacemanVel.x += spacemanAcc.x;
+        spacemanVel.y += spacemanAcc.y;
+        spaceman.x += spacemanVel.x;
+        spaceman.y += spacemanVel.y;
+        spaceman.x = Math.max(spaceman.size/2, Math.min(canvas.width-spaceman.size/2, spaceman.x));
+        spaceman.y = Math.max(spaceman.size/2, Math.min(canvas.height-spaceman.size/2, spaceman.y));
+    }
+
+    // Update aliens physics
+    function updateAliensPhysics() {
+        for(let i=0;i<aliens.length;i++){
+            if(!alienVels[i]) alienVels[i] = {x:0, y:0};
+            if(!alienAccs[i]) alienAccs[i] = {x:0, y:0};
+            // AI: Move away from spaceman if close
+            let dx = aliens[i].x - spaceman.x;
+            let dy = aliens[i].y - spaceman.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            if(dist < 80) {
+                alienAccs[i].x = dx/dist*0.3 + (Math.random()-0.5)*0.1;
+                alienAccs[i].y = dy/dist*0.3 + (Math.random()-0.5)*0.1;
+            } else {
+                alienAccs[i].x = (Math.random()-0.5)*0.2;
+                alienAccs[i].y = (Math.random()-0.5)*0.2;
+            }
+            alienVels[i].x *= 0.93; alienVels[i].y *= 0.93;
+            alienVels[i].x += alienAccs[i].x;
+            alienVels[i].y += alienAccs[i].y;
+            aliens[i].x += alienVels[i].x;
+            aliens[i].y += alienVels[i].y;
+            aliens[i].x = Math.max(aliens[i].size/2, Math.min(canvas.width-aliens[i].size/2, aliens[i].x));
+            aliens[i].y = Math.max(aliens[i].size/2, Math.min(canvas.height-aliens[i].size/2, aliens[i].y));
+        }
+    }
+
+    // Update spaceship physics
+    function updateSpaceshipPhysics() {
+        if(keys['ArrowLeft']) spaceshipAcc = -0.5;
+        else if(keys['ArrowRight']) spaceshipAcc = 0.5;
+        else spaceshipAcc = -spaceshipVel*0.2;
+        spaceshipVel += spaceshipAcc;
+        spaceshipVel *= 0.92;
+        spaceship.x += spaceshipVel;
+        spaceship.x = Math.max(spaceship.w/2, Math.min(canvas.width-spaceship.w/2, spaceship.x));
+    }
+
+    // Update asteroids physics
+    function updateAsteroidsPhysics() {
+        for(let i=0;i<asteroids.length;i++){
+            if(!asteroidVels[i]) asteroidVels[i] = {y:asteroidSpeed + Math.random()*2};
+            asteroids[i].y += asteroidVels[i].y;
+            asteroids[i].angle += asteroids[i].spin;
+        }
+    }
+
+    // --- EXTREME REALISM: Smooth animations (motion blur, easing) ---
+    function drawMotionBlur(x, y, w, h, color, alpha=0.2) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = color;
+        ctx.fillRect(x-w/2, y-h/2, w, h);
+        ctx.restore();
+    }
+
+    // --- EXTREME REALISM: Particle effects ---
+    let particles = [];
+    function spawnParticles(x, y, color, count=12) {
+        for(let i=0;i<count;i++){
+            let angle = Math.random()*Math.PI*2;
+            let speed = 2+Math.random()*2;
+            particles.push({x, y, dx:Math.cos(angle)*speed, dy:Math.sin(angle)*speed, life:20+Math.random()*10, color});
+        }
+    }
+    function updateParticles() {
+        for(let p of particles){
+            p.x += p.dx; p.y += p.dy; p.life--;
+            p.dx *= 0.96; p.dy *= 0.96;
+        }
+        particles = particles.filter(p=>p.life>0);
+    }
+    function drawParticles() {
+        for(let p of particles){
+            ctx.save();
+            ctx.globalAlpha = Math.max(0.1,p.life/30);
+            ctx.fillStyle = p.color;
+            ctx.beginPath(); ctx.arc(p.x,p.y,3,0,2*Math.PI); ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    // --- EXTREME REALISM: Dynamic lighting ---
+    function drawLighting(x, y, r, color) {
+        let grad = ctx.createRadialGradient(x,y,0,x,y,r);
+        grad.addColorStop(0, color);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.save();
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(x,y,r,0,2*Math.PI); ctx.fill();
+        ctx.restore();
+    }
+
+    // --- EXTREME REALISM: Sound effects ---
+    let sounds = {};
+    function loadSounds() {
+        sounds.catch = new Audio('https://cdn.jsdelivr.net/gh/AI-Resources/sfx/catch.wav');
+        sounds.shoot = new Audio('https://cdn.jsdelivr.net/gh/AI-Resources/sfx/laser.wav');
+        sounds.explode = new Audio('https://cdn.jsdelivr.net/gh/AI-Resources/sfx/explode.wav');
+        sounds.portal = new Audio('https://cdn.jsdelivr.net/gh/AI-Resources/sfx/portal.wav');
+        sounds.shop = new Audio('https://cdn.jsdelivr.net/gh/AI-Resources/sfx/shop.wav');
+        sounds.boss = new Audio('https://cdn.jsdelivr.net/gh/AI-Resources/sfx/boss.wav');
+    }
+    loadSounds();
+
+    // --- EXTREME REALISM: Camera shake ---
+    let cameraShake = 0;
+    function triggerCameraShake(intensity=8) { cameraShake = intensity; }
+    function applyCameraShake() {
+        if(cameraShake>0){
+            ctx.save();
+            ctx.translate((Math.random()-0.5)*cameraShake, (Math.random()-0.5)*cameraShake);
+            cameraShake *= 0.85;
+        }
+    }
+    function restoreCameraShake() {
+        if(cameraShake>0) ctx.restore();
+    }
+
+    // --- EXTREME REALISM: Key state tracking ---
+    let keys = {};
+    document.addEventListener('keydown', e => { keys[e.key] = true; });
+    document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+    // --- EXTREME REALISM: Enhanced update/draw logic ---
+    function update() {
+        updateParticles();
+        if(inSpaceship) {
+            if(normalLevel && !gameOver) updateNormalLevelScene();
+            else if(!gameOver) updateSpaceshipScene();
+            updateSpaceshipPhysics();
+            updateAsteroidsPhysics();
+        } else {
+            updateSpacemanPhysics();
+            updateAliensPhysics();
+            // Check collision
+            let caught = false;
+            aliens.forEach((alien,i) => {
+                let dx = spaceman.x - alien.x;
+                let dy = spaceman.y - alien.y;
+                if (Math.abs(dx) < (spaceman.size+alien.size)/2 && Math.abs(dy) < (spaceman.size+alien.size)/2) {
+                    score++;
+                    caught = true;
+                    caughtThisLevel++;
+                    spawnParticles(alien.x, alien.y, '#0f8');
+                    sounds.catch.currentTime=0; sounds.catch.play();
+                    // Respawn alien
+                    alien.x = Math.random()*(canvas.width-alien.size)+alien.size/2;
+                    alien.y = Math.random()*(canvas.height-alien.size)+alien.size/2;
+                }
+            });
+            if (caught) {
+                document.getElementById('score').textContent = 'Score: ' + score + ' - Alien caught!';
+            } else {
+                document.getElementById('score').textContent = 'Score: ' + score;
+            }
+            // Level progression
+            if(caughtThisLevel >= aliensToCatch && level < 4) {
+                level++;
+                setTimeout(setupLevel, 1200);
+            }
+            if(level > 3) {
+                const portalX = canvas.width/2, portalY = canvas.height/2, portalR = 50;
+                let dx = spaceman.x - portalX;
+                let dy = spaceman.y - portalY;
+                if (Math.sqrt(dx*dx + dy*dy) < portalR) {
+                    spawnParticles(portalX, portalY, '#0ff', 30);
+                    sounds.portal.currentTime=0; sounds.portal.play();
+                    // Switch to spaceship scene
+                    inSpaceship = true;
+                    asteroids = [];
+                    spaceship.x = canvas.width/2;
+                    spaceshipScore = 0;
+                    lives = 3;
+                    gameOver = false;
+                    bossBattle = false;
+                    boss.hp = 10;
+                    bullets = [];
+                    bossBullets = [];
+                    playerHP = 50;
+                }
+            }
+        }
+    }
+
+    setupLevel();
+    gameLoop();
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+    </script>
+</body>
+</html>

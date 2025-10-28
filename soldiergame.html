@@ -1,0 +1,32 @@
+<html>
+    <head>
+        <title>advertising soldiers</title>
+    </head>           
+    <body>
+        <style>
+h1 {
+font-size: 80px;
+text-align: center;
+}
+p {
+text-align: center;
+font-size: 32px;
+}
+body {
+    background: #000;
+}
+</style>
+<script>
+let hue = 0;
+function animateTextColor() {
+    hue = (hue + 2) % 360;
+    document.querySelector('h1').style.color = `hsl(${hue}, 80%, 55%)`;
+    document.querySelector('p').style.color = `hsl(${(hue+120)%360}, 80%, 55%)`;
+    requestAnimationFrame(animateTextColor);
+}
+window.onload = animateTextColor;
+</script>
+<h1>Welcome to My Website</h1>
+        <p>I have made this simple html page for my friend, soldierbob25. He has created a briliant game with minifigures (soldiers) that he buys. I want to share this with you.</p>
+    </body>
+</html>
