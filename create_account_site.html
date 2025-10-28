@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Protected Site - Create an account to get in</title>
+  <style>
+    :root{--bg:#0b1020;--card:#0f1724;--accent:#6ee7b7;--muted:#9aa6bf}
+    html,body{height:100%;margin:0;font-family:Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#071021, #0b1530);color:#e6eef8;overflow-x:hidden;}
+    .wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:32px}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));padding:28px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6);width:880px;max-width:98%;display:grid;grid-template-columns:1fr 380px;gap:20px;transition:all 0.7s cubic-bezier(.68,-0.55,.27,1.55)}
+    .left{padding:8px}
+    h1{margin:0 0 8px 0;font-size:24px}
+    p.lead{color:var(--muted);margin-top:0}
+    .protected{background:#071226;border-radius:8px;padding:16px;height:360px;overflow:auto}
+    .auth{background:rgba(255,255,255,0.02);padding:14px;border-radius:8px}
+    label{display:block;font-size:13px;margin-top:10px;color:var(--muted)}
+    input{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.01);color:inherit}
+    button{margin-top:12px;width:100%;padding:10px;border-radius:8px;border:0;background:var(--accent);color:#04201a;font-weight:600}
+    .tabs{display:flex;gap:8px;margin-bottom:10px}
+    .tab{padding:8px 12px;border-radius:8px;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.03)}
+    .tab.active{background:linear-gradient(90deg,#083e31,#0a6a55);border-color:rgba(110,231,183,0.22)}
+    .small{font-size:13px;color:var(--muted)}
+    .topbar{display:flex;justify-content:space-between;align-items:center}
+    .logout{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);padding:8px 12px;border-radius:8px;cursor:pointer}
+    .msg{font-size:13px;color:#ffddcc;margin-top:8px}
+    .hint{font-size:12px;color:var(--muted);margin-top:8px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" role="main">
+      <div class="left">
+        <div class="topbar">
+          <div>
+            <h1>Welcome — protected area</h1>
+            <p class="lead">You must create an account and log in to access the protected content on the right. This demo stores accounts in your browser (localStorage).</p>
+          </div>
+          <div>
+            <div id="who" class="small">Not signed in</div>
+            <button id="btnLogout" class="logout" style="display:none">Log out</button>
+          </div>
+        </div>
+
+        <div class="protected" id="protectedArea" aria-live="polite">
+          <h2 style="margin-top:0">Protected content</h2>
+          <div id="protectedContent">
+            <p class="small">Please sign up or log in to view the content.</p>
+          </div>
+        </div>
+      </div>
+
+      <aside class="auth">
+        <div class="tabs">
+          <div id="tabLogin" class="tab active">Log in</div>
+          <div id="tabSignup" class="tab">Sign up</div>
+        </div>
+
+        <div id="loginBox">
+          <label>Username</label>
+          <input id="loginUser" autocomplete="username">
+          <label>Password</label>
+          <input id="loginPass" type="password" autocomplete="current-password">
+          <button id="doLogin">Log in</button>
+          <div id="loginMsg" class="msg" aria-live="polite"></div>
+        </div>
+
+        <div id="signupBox" style="display:none;margin-top:8px">
+          <label>Choose a username</label>
+          <input id="signupUser" autocomplete="username">
+          <label>Choose a password</label>
+          <input id="signupPass" type="password" autocomplete="new-password">
+          <label>Confirm password</label>
+          <input id="signupPass2" type="password" autocomplete="new-password">
+          <button id="doSignup">Create account</button>
+          <div id="signupMsg" class="msg" aria-live="polite"></div>
+        </div>
+
+        <div class="hint">Note: This demo stores accounts locally in your browser only. Do not use real passwords you care about.</div>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    // Simple client-side auth demo using localStorage. Not secure for production.
+    const USERS_KEY = 'demo_users_v1';
+    const CURRENT_KEY = 'demo_current_user';
+    const CHAT_KEY = 'demo_global_chat_v1';
+
+    function loadUsers(){
+      try{ return JSON.parse(localStorage.getItem(USERS_KEY) || '{}'); }catch(e){return{}}}
+    function saveUsers(u){ localStorage.setItem(USERS_KEY, JSON.stringify(u)); }
+    async function hashPw(pw){
+      if(window.crypto && crypto.subtle && pw){
+        const enc = new TextEncoder().encode(pw);
+        const buf = await crypto.subtle.digest('SHA-256', enc);
+        return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+      }
+      return pw; // fallback (insecure)
+    }
+
+    async function signUp(){
+      const u = document.getElementById('signupUser').value.trim();
+      const p = document.getElementById('signupPass').value;
+      const p2 = document.getElementById('signupPass2').value;
+      const msg = document.getElementById('signupMsg');
+      msg.textContent = '';
+      if(!u || !p){ msg.textContent='Enter username and password.'; return; }
+      if(p !== p2){ msg.textContent='Passwords do not match.'; return; }
+      const users = loadUsers();
+      if(users[u]){ msg.textContent='Username already exists.'; return; }
+      const h = await hashPw(p);
+      users[u] = {hash:h, created:Date.now()};
+      saveUsers(users);
+      localStorage.setItem(CURRENT_KEY, u);
+      updateUI();
+    }
+
+    async function login(){
+      const u = document.getElementById('loginUser').value.trim();
+      const p = document.getElementById('loginPass').value;
+      const msg = document.getElementById('loginMsg');
+      msg.textContent = '';
+      if(!u || !p){ msg.textContent='Enter username and password.'; return; }
+      const users = loadUsers();
+      if(!users[u]){ msg.textContent='No such user.'; return; }
+      const h = await hashPw(p);
+      if(h !== users[u].hash){ msg.textContent='Incorrect password.'; return; }
+      localStorage.setItem(CURRENT_KEY, u);
+      updateUI();
+    }
+
+    function logout(){
+      localStorage.removeItem(CURRENT_KEY);
+      updateUI();
+    }
+
+    function spawnInsaneParticles(){
+      // Remove any existing particles first
+      document.querySelectorAll('.insane-particle').forEach(p=>p.remove());
+      for(let i=0;i<20;i++){
+        const p=document.createElement('div');
+        p.className='insane-particle';
+        p.style.width=p.style.height=Math.random()*32+18+'px';
+        p.style.left=Math.random()*100+'vw';
+        p.style.top='-'+(Math.random()*100)+'px';
+        p.style.background='radial-gradient(circle at 30% 30%,#ff00cc,#00ff99,#ffcc00,#3333ff,#ff3300)';
+        p.style.animationDuration=(Math.random()*4+4)+'s';
+        document.body.appendChild(p);
+        setTimeout(()=>p.remove(),8000);
+      }
+    }
+
+    function updateUI(){
+      const current = localStorage.getItem(CURRENT_KEY);
+      const who = document.getElementById('who');
+      const logoutBtn = document.getElementById('btnLogout');
+      const protectedContent = document.getElementById('protectedContent');
+      const authBar = document.querySelector('aside.auth');
+      const card = document.querySelector('.card');
+      const protectedArea = document.querySelector('.protected');
+      document.getElementById('loginMsg').textContent='';
+      document.getElementById('signupMsg').textContent='';
+      if(current){
+        who.textContent = 'Signed in as ' + current;
+        logoutBtn.style.display = 'inline-block';
+        document.body.classList.add('insane-bg');
+        if(card) card.classList.add('insane-card');
+        if(protectedArea) protectedArea.classList.add('insane-protected');
+        // Fun facts array
+        const funFacts = [
+          "Honey never spoils. Archaeologists have found edible honey in ancient tombs.",
+          "Bananas are berries, but strawberries aren't.",
+          "A group of flamingos is called a 'flamboyance'.",
+          "Octopuses have three hearts.",
+          "The unicorn is the national animal of Scotland.",
+          "There are more fake flamingos in the world than real ones.",
+          "Wombat poop is cube-shaped.",
+          "A day on Venus is longer than a year on Venus.",
+          "The inventor of the frisbee was turned into a frisbee after he died.",
+          "Cows moo with regional accents.",
+          "You can't hum while holding your nose closed.",
+          "The dot over the letter 'i' is called a tittle.",
+          "A snail can sleep for three years.",
+          "The Twitter bird's name is Larry.",
+          "A cloud can weigh more than a million pounds.",
+          "Sea otters hold hands when they sleep so they don't drift apart.",
+          "The shortest war in history lasted 38 minutes.",
+          "There are more stars in the universe than grains of sand on Earth.",
+          "Some turtles can breathe through their butts.",
+          "A flock of crows is called a murder.",
+          "The heart of a shrimp is located in its head.",
+          "A jiffy is an actual unit of time: 1/100th of a second.",
+          "A group of porcupines is called a prickle.",
+          "The tongue of a blue whale weighs as much as an elephant.",
+          "A bolt of lightning contains enough energy to toast 100,000 slices of bread.",
+          "The inventor of the microwave only received $2 for his discovery.",
+          "A crocodile cannot stick its tongue out.",
+          "The world’s largest grand piano was built by a 15-year-old in New Zealand.",
+          "A group of frogs is called an army.",
+          "The first alarm clock could only ring at 4 a.m.",
+          "A small child could swim through the veins of a blue whale.",
+          "The word 'nerd' was first coined by Dr. Seuss.",
+          "A group of kittens is called a kindle.",
+          "The inventor of the Rubik’s Cube took a month to solve it after creating it.",
+          "A group of unicorns is called a blessing.",
+          "The world’s oldest toy is a stick.",
+          "A group of owls is called a parliament.",
+          "The dot on a dice is called a pip.",
+          "A group of ferrets is called a business.",
+          "The word 'droid' is trademarked by Lucasfilm.",
+          "A group of ravens is called an unkindness.",
+          "The inventor of the Super Soaker was a NASA engineer.",
+          "A group of jellyfish is called a smack.",
+          "The world’s largest snowflake was 15 inches wide.",
+          "A group of lemurs is called a conspiracy.",
+          "The inventor of the Pringles can is buried in one.",
+          "A group of giraffes is called a tower.",
+          "The world’s deepest postbox is in Susami Bay, Japan."
+        ];
+        let factIndex = 0;
+        function showFact(idx) {
+          document.getElementById('funFactText').textContent = funFacts[idx];
+        }
+        protectedContent.innerHTML = `<div class='insane-title'>🤯 Welcome to INSANE MODE 🤯</div><p>Hi <strong>${escapeHtml(current)}</strong> — welcome to the protected area!</p>
+          <div style='margin-top:18px'>
+            <h3 style='color:#ffcc00;text-shadow:0 0 10px #ff00cc;'>Exclusive Features:</h3>
+            <ul style='font-size:1.2em;'>
+              <li>🌟 <b>Personal Dashboard</b>: Track your progress and achievements.</li>
+              <li>📰 <b>Latest News</b>: Get updates and announcements just for members.</li>
+              <li>🎮 <b>Mini Games</b>: Play fun games and compete for high scores.</li>
+              <li>💬 <b>Community Chat</b>: Connect and chat with other members.</li>
+              <li>🔒 <b>Account Settings</b>: Manage your profile and security.</li>
+            </ul>
+            <div style='margin-top:16px;padding:12px;background:#0a1a2a;border-radius:8px;box-shadow:0 0 30px #ff00cc;'>
+              <h4 style='color:#00ff99;'>Fun Fact</h4>
+              <p id='funFactText' style='font-size:1.1em;'></p>
+              <div style='font-size:12px;color:var(--muted);margin-top:8px'>Press <b>Space</b> for a new weird fact!</div>
+            </div>
+            <div id='globalChatBox' style='margin-top:18px;'></div>
+            <div style='margin-top:16px;'>
+              <button id='miniGameBtn' style='padding:16px 32px;border-radius:16px;background:linear-gradient(90deg,#ff00cc,#00ff99,#ffcc00,#3333ff,#ff3300);color:#fff;font-weight:900;border:0;cursor:pointer;font-size:1.3em;box-shadow:0 0 20px #ff00cc;'>Try a mini game</button>
+              <div id='miniGameArea' style='margin-top:18px;'></div>
+            </div>
+          </div>`;
+        showFact(factIndex);
+        renderChat(current);
+        // Spacebar event for facts
+        function factSpaceHandler(e) {
+          if(document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+          if(e.code === 'Space') {
+            factIndex = (factIndex + 1) % funFacts.length;
+            showFact(factIndex);
+          }
+        }
+        document.addEventListener('keydown', factSpaceHandler);
+        // Remove event on logout
+        logoutBtn._factSpaceHandler = factSpaceHandler;
+        if(authBar) authBar.style.display = 'none';
+        if(card) card.style.gridTemplateColumns = '1fr';
+        if(card) card.style.width = '100vw';
+        if(card) card.style.maxWidth = '100vw';
+        if(protectedArea) protectedArea.style.minHeight = '700px';
+        spawnInsaneParticles();
+      } else {
+        who.textContent = 'Not signed in';
+        logoutBtn.style.display = 'none';
+        document.body.classList.remove('insane-bg');
+        if(card) card.classList.remove('insane-card');
+        if(protectedArea) protectedArea.classList.remove('insane-protected');
+        protectedContent.innerHTML = `<p class="small">Please sign up or log in to view the content.</p>`;
+        if(authBar) authBar.style.display = '';
+        if(card) card.style.gridTemplateColumns = '1fr 380px';
+        if(card) card.style.width = '880px';
+        if(card) card.style.maxWidth = '98%';
+        if(protectedArea) protectedArea.style.minHeight = '360px';
+        // Remove insane particles
+        document.querySelectorAll('.insane-particle').forEach(p=>p.remove());
+        // Remove spacebar event if present
+        if(logoutBtn._factSpaceHandler) {
+          document.removeEventListener('keydown', logoutBtn._factSpaceHandler);
+          logoutBtn._factSpaceHandler = null;
+        }
+      }
+    }
+
+    function escapeHtml(s){ return (s+'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[c]); }
+
+    function loadChat(){
+      try{ return JSON.parse(localStorage.getItem(CHAT_KEY) || '[]'); }catch(e){return[]}}
+    function saveChat(msgs){ localStorage.setItem(CHAT_KEY, JSON.stringify(msgs)); }
+    function renderChat(currentUser){
+      const chatBox = document.getElementById('globalChatBox');
+      const chatMsgs = loadChat();
+      chatBox.innerHTML = `
+        <div id='chatMsgs' style='height:220px;overflow-y:auto;background:#101a2a;border-radius:8px;padding:8px;margin-bottom:8px;font-size:15px;box-shadow:0 2px 12px #0002;'>
+          ${chatMsgs.length === 0 ? "<div style='color:var(--muted);text-align:center;'>No messages yet. Say hi!</div>" : ""}
+        </div>
+        <div style='display:flex;gap:8px;'>
+          <input id='chatInput' type='text' maxlength='120' placeholder='Type a message...' style='flex:1;padding:10px;border-radius:8px;border:1px solid #333;background:#181f2a;color:#fff;font-size:15px;'>
+          <button id='chatSendBtn' style='padding:10px 18px;border-radius:8px;background:var(--accent);color:#04201a;font-weight:600;border:0;cursor:pointer;font-size:15px'>Send</button>
+        </div>
+        <div style='font-size:12px;color:var(--muted);margin-top:6px;text-align:right;'>Chat is local to this device. Messages update live in all tabs.</div>`;
+      const chatMsgsDiv = chatBox.querySelector('#chatMsgs');
+      chatMsgsDiv.innerHTML += chatMsgs.map(m => `<div style='margin-bottom:4px;'><span style='color:var(--accent);font-weight:600;'>${escapeHtml(m.user)}</span> <span style='color:var(--muted);font-size:12px;'>${new Date(m.time).toLocaleTimeString()}</span>: <span>${escapeHtml(m.text)}</span></div>`).join('');
+      chatMsgsDiv.scrollTop = chatMsgsDiv.scrollHeight;
+      const input = chatBox.querySelector('#chatInput');
+      chatBox.querySelector('#chatSendBtn').onclick = function(){
+        const text = input.value.trim();
+        if(text){
+          chatMsgs.push({user: currentUser, text, time: Date.now()});
+          saveChat(chatMsgs);
+          input.value = '';
+          renderChat(currentUser);
+        }
+        input.focus();
+      };
+      input.onkeydown = function(e){
+        if(e.key === 'Enter'){ chatBox.querySelector('#chatSendBtn').click(); }
+      };
+      input.focus();
+    }
+    window.addEventListener('storage', function(e){
+      if(e.key === CHAT_KEY && localStorage.getItem(CURRENT_KEY)){
+        renderChat(localStorage.getItem(CURRENT_KEY));
+      }
+    });
+
+    // Tab switching
+    document.getElementById('tabLogin').addEventListener('click', ()=>{ document.getElementById('loginBox').style.display='block'; document.getElementById('signupBox').style.display='none'; document.getElementById('tabLogin').classList.add('active'); document.getElementById('tabSignup').classList.remove('active'); });
+    document.getElementById('tabSignup').addEventListener('click', ()=>{ document.getElementById('loginBox').style.display='none'; document.getElementById('signupBox').style.display='block'; document.getElementById('tabSignup').classList.add('active'); document.getElementById('tabLogin').classList.remove('active'); });
+
+    document.getElementById('doSignup').addEventListener('click', ()=>{ signUp().catch(e=>{document.getElementById('signupMsg').textContent='Error: '+e.message}); });
+    document.getElementById('doLogin').addEventListener('click', ()=>{ login().catch(e=>{document.getElementById('loginMsg').textContent='Error: '+e.message}); });
+    document.getElementById('btnLogout').addEventListener('click', logout);
+
+    function showMiniGame() {
+      const area = document.getElementById('miniGameArea');
+      area.innerHTML = `<div style='background:#0a1a2a;padding:18px;border-radius:10px;max-width:340px;margin:auto;'>
+        <h4 style='margin-top:0'>Click the Circles!</h4>
+        <p class='small'>Score points by clicking as many moving circles as you can in 15 seconds.</p>
+        <canvas id='mgCanvas' width='300' height='200' style='background:#111;border-radius:8px;display:block;margin:auto'></canvas>
+        <div id='mgScore' style='margin-top:8px;font-size:18px;color:var(--accent)'>Score: 0</div>
+        <div id='mgTimer' style='font-size:14px;color:var(--muted)'>Time: 15</div>
+        <button id='mgStartBtn' style='margin-top:10px;padding:8px 16px;border-radius:8px;background:var(--accent);color:#04201a;font-weight:600;border:0;cursor:pointer'>Start Game</button>
+      </div>`;
+      let score = 0, time = 15, circles = [], running = false, timerId;
+      const canvas = document.getElementById('mgCanvas');
+      const ctx = canvas.getContext('2d');
+      function spawnCircles() {
+        circles = [];
+        for(let i=0;i<5;i++){
+          circles.push({x:Math.random()*260+20, y:Math.random()*160+20, r:18, dx:Math.random()*2-1, dy:Math.random()*2-1});
+        }
+      }
+      function drawCircles() {
+        ctx.clearRect(0,0,300,200);
+        circles.forEach(c=>{
+          ctx.beginPath();
+          ctx.arc(c.x,c.y,c.r,0,2*Math.PI);
+          ctx.fillStyle = `hsl(${Math.floor(Math.random()*360)},80%,60%)`;
+          ctx.globalAlpha = 0.85;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        });
+      }
+      function moveCircles() {
+        circles.forEach(c=>{
+          c.x += c.dx;
+          c.y += c.dy;
+          if(c.x<20||c.x>280) c.dx*=-1;
+          if(c.y<20||c.y>180) c.dy*=-1;
+        });
+      }
+      function gameLoop() {
+        if(!running) return;
+        moveCircles();
+        drawCircles();
+        requestAnimationFrame(gameLoop);
+      }
+      canvas.onclick = function(e){
+        if(!running) return;
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX-rect.left, my = e.clientY-rect.top;
+        circles.forEach((c,i)=>{
+          if(Math.hypot(mx-c.x,my-c.y)<c.r){
+            score++;
+            document.getElementById('mgScore').textContent = 'Score: '+score;
+            circles[i] = {x:Math.random()*260+20, y:Math.random()*160+20, r:18, dx:Math.random()*2-1, dy:Math.random()*2-1};
+          }
+        });
+      };
+      function startGame() {
+        score = 0; time = 15; running = true;
+        document.getElementById('mgScore').textContent = 'Score: 0';
+        document.getElementById('mgTimer').textContent = 'Time: 15';
+        spawnCircles();
+        drawCircles();
+        gameLoop();
+        timerId = setInterval(()=>{
+          time--;
+          document.getElementById('mgTimer').textContent = 'Time: '+time;
+          if(time<=0){
+            running = false;
+            clearInterval(timerId);
+            document.getElementById('mgTimer').textContent = 'Game Over!';
+            document.getElementById('mgScore').textContent += ' | Final Score';
+          }
+        },1000);
+      }
+      document.getElementById('mgStartBtn').onclick = startGame;
+    }
+
+    document.addEventListener('click', function(e){
+      if(e.target && e.target.id==='miniGameBtn') showMiniGame();
+    });
+
+    // initialize
+    updateUI();
+  </script>
+</body>
+</html>

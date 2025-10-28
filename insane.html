@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>INSANE WEBSITE</title>
+  <style>
+    html,body {
+      height: 100%;
+      margin: 0;
+      font-family: 'Segoe UI', 'Comic Sans MS', cursive, sans-serif;
+      background: linear-gradient(270deg,#ff00cc,#3333ff,#00ff99,#ffcc00,#ff3300);
+      background-size: 400% 400%;
+      animation: insaneBg 8s ease-in-out infinite;
+      overflow: hidden;
+    }
+    @keyframes insaneBg {
+      0%{background-position:0% 50%}
+      50%{background-position:100% 50%}
+      100%{background-position:0% 50%}
+    }
+    .insane-title {
+      font-size: 4em;
+      font-weight: 900;
+      color: #fff;
+      text-shadow: 0 0 40px #ff00cc,0 0 80px #00ff99,0 0 120px #ffcc00;
+      animation: insaneTitle 2s infinite alternate;
+      margin-top: 40px;
+      text-align: center;
+    }
+    @keyframes insaneTitle {
+      0%{letter-spacing:2px;transform:scale(1)}
+      100%{letter-spacing:24px;transform:scale(1.15)}
+    }
+    .insane-btn {
+      display: block;
+      margin: 40px auto;
+      padding: 20px 40px;
+      font-size: 2em;
+      border-radius: 20px;
+      background: linear-gradient(90deg,#ff00cc,#00ff99,#ffcc00,#3333ff,#ff3300);
+      color: #fff;
+      font-weight: 900;
+      border: none;
+      box-shadow: 0 0 30px #ff00cc,0 0 40px #00ff99;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .insane-btn:hover {
+      transform: scale(1.1) rotate(-5deg);
+      filter: brightness(1.2);
+    }
+    .insane-facts {
+      max-width: 600px;
+      margin: 40px auto;
+      background: rgba(0,0,0,0.7);
+      border-radius: 20px;
+      box-shadow: 0 0 40px #ff00cc,0 0 80px #ffcc00;
+      color: #fff;
+      font-size: 1.5em;
+      padding: 32px;
+      text-align: center;
+      position: relative;
+    }
+    .insane-particle {
+      position: fixed;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0.7;
+      animation: insaneParticleMove 10s linear infinite;
+    }
+    @keyframes insaneParticleMove {
+      0%{transform:translateY(0)}
+      100%{transform:translateY(100vh)}
+    }
+    .insane-footer {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      text-align: center;
+      color: #fff;
+      font-size: 1.2em;
+      padding: 18px;
+      background: linear-gradient(90deg,#ff00cc,#00ff99,#ffcc00,#3333ff,#ff3300);
+      box-shadow: 0 -2px 20px #ff00cc;
+      letter-spacing: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="insane-title">🤯 INSANE WEBSITE 🤯</div>
+  <button class="insane-btn" id="insaneBtn">Next Fun Fact!</button>
+  <button class="insane-btn" id="colorModeBtn">Toggle Random Color Mode</button>
+  <button class="insane-btn" id="soundBtn">Surprise Sound!</button>
+  <div class="insane-facts" id="insaneFacts"></div>
+  <select id="factHistory" style="display:block;margin:20px auto;font-size:1.2em;padding:8px 16px;border-radius:10px;background:#222;color:#fff;box-shadow:0 0 10px #ff00cc;max-width:400px;width:80%;"></select>
+  <div class="insane-footer">Made with 100% Insanity &amp; CSS Magic — 2025</div>
+  <script>
+    // Insane fun facts
+    const facts = [
+      "Honey never spoils. Archaeologists have found edible honey in ancient tombs.",
+      "Bananas are berries, but strawberries aren't.",
+      "A group of flamingos is called a 'flamboyance'.",
+      "Octopuses have three hearts.",
+      "The unicorn is the national animal of Scotland.",
+      "Wombat poop is cube-shaped.",
+      "A day on Venus is longer than a year on Venus.",
+      "The inventor of the frisbee was turned into a frisbee after he died.",
+      "Cows moo with regional accents.",
+      "You can't hum while holding your nose closed.",
+      "A snail can sleep for three years.",
+      "A cloud can weigh more than a million pounds.",
+      "Sea otters hold hands when they sleep so they don't drift apart.",
+      "The shortest war in history lasted 38 minutes.",
+      "Some turtles can breathe through their butts.",
+      "A flock of crows is called a murder.",
+      "A jiffy is an actual unit of time: 1/100th of a second.",
+      "The tongue of a blue whale weighs as much as an elephant.",
+      "A bolt of lightning contains enough energy to toast 100,000 slices of bread.",
+      "A group of frogs is called an army.",
+      "A group of kittens is called a kindle.",
+      "A group of unicorns is called a blessing.",
+      "A group of owls is called a parliament.",
+      "A group of ferrets is called a business.",
+      "A group of jellyfish is called a smack.",
+      "A group of lemurs is called a conspiracy.",
+      "A group of giraffes is called a tower.",
+      "The world’s deepest postbox is in Susami Bay, Japan.",
+      "The inventor of the Pringles can is buried in one.",
+      "The world’s largest snowflake was 15 inches wide.",
+      "The inventor of the Super Soaker was a NASA engineer.",
+      "A group of ravens is called an unkindness.",
+      "A group of porcupines is called a prickle.",
+      "The dot over the letter 'i' is called a tittle.",
+      "The Twitter bird's name is Larry.",
+      "A group of flamingos is called a flamboyance.",
+      "A group of giraffes is called a tower.",
+      "A group of unicorns is called a blessing.",
+      "A group of jellyfish is called a smack.",
+      "A group of lemurs is called a conspiracy."
+    ];
+    let factIndex = 0;
+    let history = [];
+    const insaneFacts = document.getElementById('insaneFacts');
+    const factHistory = document.getElementById('factHistory');
+    function showFact(idx) {
+      insaneFacts.textContent = facts[idx];
+      history.push(facts[idx]);
+      updateHistory();
+    }
+    function updateHistory() {
+      factHistory.innerHTML = '';
+      history.slice(-10).forEach((fact, i) => {
+        const opt = document.createElement('option');
+        opt.textContent = `${history.length-10+i+1}. ${fact}`;
+        factHistory.appendChild(opt);
+      });
+    }
+    showFact(factIndex);
+    document.getElementById('insaneBtn').onclick = function() {
+      factIndex = (factIndex + 1) % facts.length;
+      showFact(factIndex);
+      spawnParticles();
+    };
+    document.body.onkeydown = function(e) {
+      if(e.code === 'Space') {
+        factIndex = (factIndex + 1) % facts.length;
+        showFact(factIndex);
+        spawnParticles();
+      }
+    };
+    // Color mode toggle
+    let colorMode = false;
+    document.getElementById('colorModeBtn').onclick = function() {
+      colorMode = !colorMode;
+      if(colorMode) {
+        document.body.style.background = `linear-gradient(270deg, #${Math.floor(Math.random()*16777215).toString(16)}, #${Math.floor(Math.random()*16777215).toString(16)}, #${Math.floor(Math.random()*16777215).toString(16)})`;
+      } else {
+        document.body.style.background = '';
+      }
+    };
+    // Surprise sound (fart sound)
+    document.getElementById('soundBtn').onclick = function() {
+      let audio = document.getElementById('fartAudio');
+      if (!audio) {
+        audio = document.createElement('audio');
+        audio.id = 'fartAudio';
+        audio.src = 'https://cdn.pixabay.com/audio/2022/03/15/audio_115b6c7b7b.mp3'; // Free fart sound
+        document.body.appendChild(audio);
+      }
+      audio.currentTime = 0;
+      audio.play();
+    };
+    // Smoother particles
+    function spawnParticles() {
+      for(let i=0;i<5;i++){
+        const p=document.createElement('div');
+        p.className='insane-particle';
+        p.style.width=p.style.height=Math.random()*24+12+'px';
+        p.style.left=Math.random()*100+'vw';
+        p.style.top='-'+(Math.random()*40)+'px';
+        p.style.background='radial-gradient(circle at 30% 30%,#ff00cc,#00ff99,#ffcc00,#3333ff,#ff3300)';
+        p.style.animationDuration=(Math.random()*4+3)+'s';
+        document.body.appendChild(p);
+        setTimeout(()=>p.remove(),7000);
+      }
+    }
+    // Initial insanity
+    spawnParticles();
+  </script>
+</body>
+</html>

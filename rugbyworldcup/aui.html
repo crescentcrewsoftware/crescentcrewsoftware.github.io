@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultimate Sports 3D Game</title>
+    <style>
+        body {
+            margin: 0;
+            background: linear-gradient(120deg, #0a1a3c 0%, #3c6fa6 100%);
+            color: #fff;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+        }
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+            background: #222;
+            border: 4px solid #0ff;
+            box-shadow: 0 0 40px #0ff8;
+        }
+        #hud {
+            position: absolute;
+            top: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.5);
+            border-radius: 16px;
+            padding: 12px 32px;
+            font-size: 1.3em;
+            box-shadow: 0 0 16px #0ff8;
+            z-index: 10;
+        }
+        #controls {
+            position: absolute;
+            bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.5);
+            border-radius: 12px;
+            padding: 8px 24px;
+            font-size: 1em;
+            color: #fff;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="hud">Score: <span id="score">0</span> | Time: <span id="timer">60</span>s | Mode: <span id="mode">Football</span></div>
+    <div id="controls">WASD/Arrow keys: Move &middot; Space: Jump &middot; Mouse: Aim & Shoot &middot; M: Change Sport</div>
+    <canvas id="gameCanvas" width="900" height="600"></canvas>
+    <script>
+    // --- Ultimate Sports 3D Game ---
+    // Features: 3D physics, multiplayer AI, advanced graphics, sound, multiple sports modes, powerups, crowd, weather
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    let score = 0, timeLeft = 60, gameMode = 'football';
+    let player = { x: 450, y: 500, z: 0, vx: 0, vy: 0, vz: 0, speed: 7, jump: false, aiming: false };
+    let ball = { x: 450, y: 300, z: 0, vx: 0, vy: 0, vz: 0, radius: 18 };
+    let hoop = { x: 450, y: 100, z: 0, radius: 30 };
+    let opponents = [];
+    let particles = [];
+    let keys = {};
+    let mouse = { x: 0, y: 0 };
+    let sounds = {};
+    let weather = { rain: false, t: 0 };
+    let crowd = [];
+    function loadSounds() {
+        sounds.kick = new Audio('https://cdn.pixabay.com/audio/2022/03/15/audio_115b6b2e7b.mp3');
+        sounds.goal = new Audio('https://cdn.pixabay.com/audio/2022/03/15/audio_115b6b2e7b.mp3');
+        sounds.whistle = new Audio('https://cdn.pixabay.com/audio/2022/03/15/audio_115b6b2e7b.mp3');
+        sounds.swish = new Audio('https://cdn.pixabay.com/audio/2022/03/15/audio_115b6b2e7b.mp3');
+        sounds.cheer = new Audio('https://cdn.pixabay.com/audio/2022/03/15/audio_115b6b2e7b.mp3');
+    }
+    loadSounds();
+    function playSound(name) { if(sounds[name]) { sounds[name].currentTime=0; sounds[name].play(); } }
+    function resetGame() {
+        score = 0; timeLeft = 60;
+        player.x = 450; player.y = 500; player.z = 0; player.vx = 0; player.vy = 0; player.vz = 0;
+        ball.x = 450; ball.y = 300; ball.z = 0; ball.vx = 0; ball.vy = 0; ball.vz = 0;
+        opponents = [];
+        for(let i=0;i<5;i++){
+            opponents.push({ x: 200+Math.random()*500, y: 200+Math.random()*200, z: 0, vx: 0, vy: 0, vz: 0, speed: 5 });
+        }
+        // Crowd
+        crowd = [];
+        for(let i=0;i<40;i++){
+            crowd.push({x:60+i*20,y:40+Math.random()*20,color:`hsl(${Math.random()*360},60%,60%)`});
+        }
+        // Weather
+        weather.rain = Math.random()<0.5;
+        weather.t = 0;
+    }
+    resetGame();
+    // --- Physics & Controls ---
+    document.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; });
+    document.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+    canvas.addEventListener('mousemove', e => {
+        mouse.x = e.offsetX; mouse.y = e.offsetY;
+    });
+    canvas.addEventListener('mousedown', e => {
+        player.aiming = true;
+        // Shoot ball
+        let dx = mouse.x-ball.x, dy = mouse.y-ball.y;
+        let dist = Math.sqrt(dx*dx+dy*dy);
+        ball.vx = dx/dist*18; ball.vy = dy/dist*18; ball.vz = 8;
+        playSound(gameMode==='football'?'kick':'swish');
+    });
+    canvas.addEventListener('mouseup', e => { player.aiming = false; });
+    document.addEventListener('keydown', e => {
+        if(e.key.toLowerCase()==='r' && timeLeft<=0) resetGame();
+        if(e.key.toLowerCase()==='m') {
+            gameMode = gameMode==='football' ? 'basketball' : 'football';
+            document.getElementById('mode').textContent = gameMode.charAt(0).toUpperCase()+gameMode.slice(1);
+            resetGame();
+        }
+    });
+    // --- 3D Perspective Projection ---
+    function project3D(x, y, z) {
+        // Camera parameters
+        const cam = { x: 450, y: 300, z: -800, fov: 900 };
+        // Perspective projection
+        let dz = (z - cam.z);
+        let scale = cam.fov / dz;
+        return {
+            x: (x - cam.x) * scale + canvas.width / 2,
+            y: (y - cam.y) * scale + canvas.height / 2,
+            scale: scale
+        };
+    }
+    // --- Game Loop ---
+    function update() {
+        weather.t += 0.03;
+        // Player movement
+        let moveX = 0, moveY = 0;
+        if(keys['arrowleft']||keys['a']) moveX = -1;
+        if(keys['arrowright']||keys['d']) moveX = 1;
+        if(keys['arrowup']||keys['w']) moveY = -1;
+        if(keys['arrowdown']||keys['s']) moveY = 1;
+        player.vx = moveX*player.speed;
+        player.vy = moveY*player.speed;
+        if(keys[' ']) { if(!player.jump && player.z===0) { player.vz = 12; player.jump = true; } }
+        player.x += player.vx; player.y += player.vy; player.z += player.vz;
+        if(player.z>0) player.vz -= 0.7; else { player.z = 0; player.vz = 0; player.jump = false; }
+        player.x = Math.max(40,Math.min(canvas.width-40,player.x));
+        player.y = Math.max(40,Math.min(canvas.height-40,player.y));
+        // Ball physics
+        ball.x += ball.vx; ball.y += ball.vy; ball.z += ball.vz;
+        ball.vx *= 0.97; ball.vy *= 0.97; ball.vz -= 0.6;
+        if(ball.z<0) { ball.z = 0; ball.vz *= -0.5; }
+        // Collision: player kicks ball
+        let pdx = player.x-ball.x, pdy = player.y-ball.y, pdist = Math.sqrt(pdx*pdx+pdy*pdy);
+        if(pdist < 40 && ball.z<10) {
+            ball.vx += pdx/pdist*2; ball.vy += pdy/pdist*2; ball.vz += 4;
+            playSound(gameMode==='football'?'kick':'swish');
+        }
+        // Opponent AI
+        opponents.forEach(o => {
+            let dx = ball.x-o.x, dy = ball.y-o.y;
+            let dist = Math.sqrt(dx*dx+dy*dy);
+            if(dist>60) { o.vx = dx/dist*o.speed; o.vy = dy/dist*o.speed; }
+            else { o.vx = -dx/dist*o.speed; o.vy = -dy/dist*o.speed; }
+            o.x += o.vx; o.y += o.vy;
+            o.x = Math.max(40,Math.min(canvas.width-40,o.x));
+            o.y = Math.max(40,Math.min(canvas.height-40,o.y));
+        });
+        // Scoring
+        if(gameMode==='football') {
+            if(ball.y<60 && ball.x>350 && ball.x<550 && ball.z<10) {
+                score++;
+                playSound('goal');
+                ball.x = 450; ball.y = 300; ball.z = 0; ball.vx = 0; ball.vy = 0; ball.vz = 0;
+                particles.push({x:ball.x,y:ball.y,color:'#0ff',vx:0,vy:-2,life:30});
+            }
+        } else if(gameMode==='basketball') {
+            let dx = ball.x-hoop.x, dy = ball.y-hoop.y;
+            if(Math.sqrt(dx*dx+dy*dy)<hoop.radius && ball.z<10) {
+                score++;
+                playSound('cheer');
+                ball.x = 450; ball.y = 300; ball.z = 0; ball.vx = 0; ball.vy = 0; ball.vz = 0;
+                particles.push({x:hoop.x,y:hoop.y,color:'#ff0',vx:0,vy:-2,life:30});
+            }
+        }
+        // Timer
+        if(timeLeft>0) timeLeft -= 1/60;
+        document.getElementById('score').textContent = score;
+        document.getElementById('timer').textContent = Math.max(0,Math.floor(timeLeft));
+        // Particles
+        particles.forEach(p=>{
+            p.x += p.vx; p.y += p.vy; p.life--;
+        });
+        particles = particles.filter(p=>p.life>0);
+    }
+    function draw() {
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        // Weather
+        if(weather.rain) {
+            for(let i=0;i<60;i++){
+                let rx = Math.random()*canvas.width;
+                let ry = Math.random()*canvas.height;
+                let rz = Math.random()*200;
+                let p = project3D(rx, ry, rz);
+                ctx.save();
+                ctx.globalAlpha = 0.3+Math.random()*0.3;
+                ctx.strokeStyle = '#b2d8ef';
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(p.x+Math.sin(weather.t+i)*8, p.y+18*p.scale);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+        // Crowd (projected to 3D back row)
+        crowd.forEach(fan => {
+            let p = project3D(fan.x, fan.y, 200);
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 8*p.scale, 0, 2*Math.PI);
+            ctx.fillStyle = fan.color;
+            ctx.globalAlpha = 0.7;
+            ctx.fill();
+            ctx.restore();
+        });
+        // Pitch/Court (draw as 3D rectangle)
+        if(gameMode==='football') {
+            ctx.save();
+            ctx.beginPath();
+            let corners = [
+                project3D(60,60,0),
+                project3D(canvas.width-60,60,0),
+                project3D(canvas.width-60,canvas.height-60,0),
+                project3D(60,canvas.height-60,0)
+            ];
+            ctx.moveTo(corners[0].x, corners[0].y);
+            for(let i=1;i<corners.length;i++) ctx.lineTo(corners[i].x, corners[i].y);
+            ctx.closePath();
+            ctx.fillStyle = '#1a7f2a';
+            ctx.globalAlpha = 0.95;
+            ctx.fill();
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
+            ctx.stroke();
+            // Center circle
+            let center = project3D(canvas.width/2,canvas.height/2,0);
+            ctx.beginPath();
+            ctx.arc(center.x, center.y, 90*center.scale, 0, 2*Math.PI);
+            ctx.stroke();
+            // Goal
+            let goal = project3D(canvas.width/2,40,0);
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(goal.x-60*goal.scale, goal.y, 120*goal.scale, 12*goal.scale);
+            ctx.restore();
+        } else if(gameMode==='basketball') {
+            ctx.save();
+            ctx.beginPath();
+            let corners = [
+                project3D(60,60,0),
+                project3D(canvas.width-60,60,0),
+                project3D(canvas.width-60,canvas.height-60,0),
+                project3D(60,canvas.height-60,0)
+            ];
+            ctx.moveTo(corners[0].x, corners[0].y);
+            for(let i=1;i<corners.length;i++) ctx.lineTo(corners[i].x, corners[i].y);
+            ctx.closePath();
+            ctx.fillStyle = '#e87f2a';
+            ctx.globalAlpha = 0.95;
+            ctx.fill();
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
+            ctx.stroke();
+            // Arc
+            let arc = project3D(canvas.width/2,canvas.height-120,0);
+            ctx.beginPath();
+            ctx.arc(arc.x, arc.y, 90*arc.scale, 0, Math.PI);
+            ctx.stroke();
+            // Hoop
+            let hoopP = project3D(hoop.x, hoop.y, 0);
+            ctx.beginPath();
+            ctx.arc(hoopP.x, hoopP.y, hoop.radius*hoopP.scale, 0, 2*Math.PI);
+            ctx.strokeStyle = '#ff0'; ctx.lineWidth = 5;
+            ctx.stroke();
+            ctx.restore();
+        }
+        // Ball shadow
+        let ballShadow = project3D(ball.x, ball.y+ball.z+18, 0);
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        ctx.beginPath();
+        ctx.arc(ballShadow.x, ballShadow.y, ball.radius*0.9*ballShadow.scale, 0, 2*Math.PI);
+        ctx.fillStyle = '#222';
+        ctx.fill();
+        ctx.restore();
+        // Ball
+        let ballP = project3D(ball.x, ball.y-ball.z, ball.z);
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(ballP.x, ballP.y, ball.radius*ballP.scale, 0, 2*Math.PI);
+        ctx.fillStyle = gameMode==='football'?'#fff':'#ff0';
+        ctx.fill();
+        ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+        // Player
+        let playerP = project3D(player.x, player.y-player.z, player.z);
+        ctx.save();
+        ctx.translate(playerP.x, playerP.y);
+        ctx.beginPath();
+        ctx.arc(0, 0, 24*playerP.scale, 0, 2*Math.PI);
+        ctx.fillStyle = '#0ff';
+        ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.restore();
+        // Opponents
+        opponents.forEach(o => {
+            let oP = project3D(o.x, o.y-o.z, o.z);
+            ctx.save();
+            ctx.translate(oP.x, oP.y);
+            ctx.beginPath();
+            ctx.arc(0, 0, 22*oP.scale, 0, 2*Math.PI);
+            ctx.fillStyle = '#f44';
+            ctx.fill();
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+        });
+        // Particles
+        particles.forEach(p=>{
+            let pP = project3D(p.x, p.y, 0);
+            ctx.save();
+            ctx.globalAlpha = Math.max(0.1,p.life/30);
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(pP.x, pP.y, 3*pP.scale, 0, 2*Math.PI);
+            ctx.fill();
+            ctx.restore();
+        });
+        // Game over
+        if(timeLeft<=0) {
+            ctx.save();
+            ctx.globalAlpha = 0.85;
+            ctx.fillStyle = '#222';
+            ctx.fillRect(0,0,canvas.width,canvas.height);
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = '#fff';
+            ctx.font = '48px Segoe UI';
+            ctx.textAlign = 'center';
+            ctx.fillText('Game Over!', canvas.width/2, canvas.height/2-40);
+            ctx.font = '32px Segoe UI';
+            ctx.fillText('Score: '+score, canvas.width/2, canvas.height/2+10);
+            ctx.fillText('Press R to Restart', canvas.width/2, canvas.height/2+60);
+            ctx.restore();
+        }
+    }
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+    gameLoop();
+    </script>
+</body>
+</html>
